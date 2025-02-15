@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Dynamic Graph with WebSocket Data</title>
+  <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
+  <style>
+    #mynetwork {
+      width: 100%;
+      height: 600px;
+      border: 1px solid lightgray;
+    }
+  </style>
+</head>
+<body>
+  <h2>Dynamic Graph (WebSocket Updates)</h2>
+  <div id="mynetwork"></div>
+
+  <script>
+    const SERVER_URL = "ws://172.16.128.248:3000/upload-json"; // Change to your server's actual IP
+
+    const socket = new WebSocket(SERVER_URL);
+    const nodeMetaMap = new Map();
+    let nodes = new vis.DataSet([]);
+    let edges = new vis.DataSet([]);
+
+    var container = document.getElementById('mynetwork');
+    var data = { nodes: nodes, edges: edges };
+    var options = {
+      nodes: { shape: 'dot', size: 20 },
+      edges: { color: 'gray', arrows: { to: { enabled: true, scaleFactor: 0.5 } } },
+      physics: { enabled: true, solver: 'forceAtlas2Based' }
+    };
+    var network = new vis.Network(container, data, options);
+
+    socket.onopen = () => console.log("✅ Connected to WebSocket Server at " + SERVER_URL);
+    
+    socket.onmessage = (event) => {
+      try {
+        const jsonData = JSON.parse(event.data);
+        console.log('🔵 Received WebSocket data:', jsonData);
+
+        const currentFunction = jsonData.current_function || "unknown_function";
+        const rawJson = jsonData.raw_json || {};
+        const nodeId = nodes.length + 1;
+
+        nodeMetaMap.set(nodeId, { method: currentFunction, log_details: rawJson });
+
+        nodes.add({ 
+          id: nodeId, 
+          label: currentFunction, 
+          title: JSON.stringify(nodeMetaMap.get(nodeId), null, 2)
+        });
+
+        if (nodeId > 1) {
+          edges.add({ from: nodeId - 1, to: nodeId });
+        }
+
+      } catch (error) {
+        console.error('❌ Error parsing WebSocket data:', error);
+      }
+    };
+
+    socket.onclose = () => console.log("⚠️ WebSocket disconnected from" + SERVER_URL);
+  </script>
+</body>
+</html>
