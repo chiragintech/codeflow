@@ -39,6 +39,12 @@ export function activate(context: vscode.ExtensionContext) {
     })
   );
   context.subscriptions.push(
+    vscode.commands.registerCommand("codeflow.refresh", () => {
+      InitialPanel.kill();
+      InitialPanel.createOrShow(context.extensionUri);
+    })
+  );
+  context.subscriptions.push(
     vscode.commands.registerCommand("codeflow.executeFile", async () => {
       if (InitialPanel.currentPanel) {
         InitialPanel.currentPanel._executeFile();
