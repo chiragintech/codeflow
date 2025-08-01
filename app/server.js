@@ -9,7 +9,7 @@ const app = express();
 const port = 3000;
 
 // MongoDB Connection URI (Replace with your MongoDB Atlas URI)
-const MONGO_URI = "mongodb+srv://bharathkgit:<password>@cluster0.4m5vg.mongodb.net/?retryWrites=true&w=majority";
+const MONGO_URI = "mongodb://localhost:27017/";
 const client = new MongoClient(MONGO_URI);
 
 // Middleware to parse JSON request bodies

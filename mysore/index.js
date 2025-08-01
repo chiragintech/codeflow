@@ -223,7 +223,7 @@ global.trace = function (fn, name) {
             // --- POST the function log object immediately ---
             const postData = JSON.stringify(logEntry);
             const options = {
-                hostname: "172.16.128.248",
+                hostname: "localhost",
                 port: 3000,
                 path: "/upload-json",
                 method: "POST",

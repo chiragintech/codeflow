@@ -4,7 +4,9 @@ import * as vscode from "vscode";
 import { InitialPanel } from "./initial";
 import * as path from "path";
 import { exec } from "child_process";
+
 export let executionLogData = "";
+
 export function executeFile(filePath: string) {
   const ext = path.extname(filePath);
 
@@ -33,6 +35,7 @@ export function executeFile(filePath: string) {
 }
 export function activate(context: vscode.ExtensionContext) {
   console.log('Congratulations, your extension "codeflow" is now active!');
+  
   context.subscriptions.push(
     vscode.commands.registerCommand("codeflow.graphGenerator", () => {
       InitialPanel.createOrShow(context.extensionUri);

@@ -3,15 +3,6 @@ import { exec } from "child_process";
 import { getNonce } from "./getNonce";
 import * as path from "path";
 import * as fs from "fs";
-let data_read = "";
-const txtFilePath = path.join(__dirname, "./t.txt");
-fs.readFile(txtFilePath, "utf8", (err, data_read) => {
-    if (err) {
-      console.error("Error:", err);
-      return;
-    }
-    console.log("File data:", data_read);
-});
 
 
 export class InitialPanel {
@@ -57,19 +48,6 @@ export class InitialPanel {
   private constructor(panel: vscode.WebviewPanel, extensionUri: vscode.Uri) {
     this._panel = panel;
     this._extensionUri = extensionUri;
-    const txtFilePath = path.join(__dirname, "./t.txt");
-    fs.readFile(txtFilePath, "utf8", (err, fileData) => {
-      if (err) {
-        console.error("Error reading file:", err);
-        return;
-      }
-      console.log("File data:", fileData);
-      // Send the file data to the webview
-      this._panel.webview.postMessage({
-        type: "fileData",
-        content: fileData,
-      });
-    });
     this._update();
 
     this._panel.onDidDispose(() => this.dispose(), null, this._disposables);
@@ -188,7 +166,7 @@ export class InitialPanel {
     return `<!DOCTYPE html>
 <html>
 <head>
-  <title>Dynamic Graph with WebSocket Data</title>
+  <title>Dynamic Graph</title>
   <script type="text/javascript" src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
   <style>
     #mynetwork {
@@ -199,31 +177,23 @@ export class InitialPanel {
   </style>
 </head>
 <body>
-  <h2>One Node per Message (Rebuilt by Sequence)</h2>
   <div id="mynetwork"></div>
 
   <script>
-    const SERVER_URL = "ws://172.16.128.248:3000"; // Update to your actual WebSocket server URL
+    const SERVER_URL = "ws://localhost:3000";
     const socket = new WebSocket(SERVER_URL);
-
-    // Accumulate all messages here
     const allMessages = [];
 
     // vis.js DataSets
     const nodes = new vis.DataSet([]);
     const edges = new vis.DataSet([]);
-
-    // For generating unique node IDs
     let uniqueIdCounter = 1;
+    
     function generateUniqueId() {
       return uniqueIdCounter++;
     }
 
-    // Node ID reference, so we can link them in order
-    // We'll rebuild these from scratch each time
-    let nodeIds = []; // array of node IDs, in sorted order of messages
-
-    // Setup the vis.js network
+    let nodeIds = [];
     const container = document.getElementById('mynetwork');
     const data = { nodes, edges };
     const options = {
@@ -242,35 +212,36 @@ export class InitialPanel {
         solver: 'forceAtlas2Based'
       }
     };
+
     const network = new vis.Network(container, data, options);
 
-    /**
-     * Rebuild the entire graph from scratch based on allMessages.
-     * Ensures exactly one node per message, in the order of sequence.
-     */
     function rebuildGraph() {
-      // 1) Clear existing nodes/edges
       nodes.clear();
       edges.clear();
       nodeIds = [];
 
-      // 2) Sort allMessages by raw_json.sequence
+      // Sort allMessages by raw_json.sequence
       allMessages.sort((a, b) => {
         const seqA = a.raw_json?.sequence ?? 0;
         const seqB = b.raw_json?.sequence ?? 0;
         return seqA - seqB;
       });
 
-      // 3) First pass: create exactly one node per message
+      // First pass: create exactly one node per message
       for (let i = 0; i < allMessages.length; i++) {
         const msg = allMessages[i];
         const { raw_json } = msg;
-        const { method, status } = raw_json;
+        const { method, status, error, stackTrace } = raw_json;
 
-        // Decide color
+        // Decide color and shape based on error type
         let color = "gray";
+        let shape = "dot";
+        let size = 20;
+        
         if (status === "error") {
           color = "red";
+          shape = "diamond"; // Error nodes are diamonds
+          size = 25;
         } else if (status === "success") {
           color = "green";
         }
@@ -279,19 +250,34 @@ export class InitialPanel {
         const newNodeId = generateUniqueId();
         nodeIds.push(newNodeId);
 
+        // Create detailed tooltip with error info
+        let tooltip = "Function: " + method + "\\nStatus: " + status;
+        if (error) {
+          tooltip += "\\nError: " + error;
+        }
+        if (stackTrace) {
+          tooltip += "\\n\\nStack Trace:\\n" + stackTrace;
+        }
+        if (raw_json.parameters) {
+          tooltip += "\\n\\nParameters: " + JSON.stringify(raw_json.parameters, null, 2);
+        }
+
         // Add to nodes DataSet
         nodes.add({
           id: newNodeId,
           label: method || "unknown",
           color: color,
-          title: JSON.stringify(msg, null, 2)
+          shape: shape,
+          size: size,
+          title: tooltip,
+          font: {
+            size: status === "error" ? 14 : 12,
+            bold: status === "error"
+          }
         });
       }
 
-      // 4) Second pass: create edges based on next_calls
-      //    We'll link from message i to j if:
-      //    - j has a strictly higher sequence
-      //    - raw_json.method in j matches one of i's next_calls
+      // Second pass: create edges based on next_calls
       for (let i = 0; i < allMessages.length; i++) {
         const fromMsg = allMessages[i];
         const fromSeq = fromMsg.raw_json?.sequence ?? 0;
@@ -332,39 +318,22 @@ export class InitialPanel {
 
     // Socket events
     socket.onopen = () => {
-      console.log("✅ Connected to WebSocket Server at " + SERVER_URL);
+      console.log("Connected to WebSocket Server at " + SERVER_URL);
     };
 
     socket.onmessage = (event) => {
       try {
         const jsonData = JSON.parse(event.data);
-        console.log("🔵 Received WebSocket data:", jsonData);
-
-        // Expecting something like:
-        // {
-        //   current_function: 'functionB',
-        //   raw_json: {
-        //     method: 'functionB',
-        //     next_calls: [],
-        //     sequence: 2,
-        //     status: 'success',
-        //     ... other fields ...
-        //   }
-        // }
-
-        // 1) Store this message in allMessages
+        console.log("Received WebSocket data:", jsonData);
         allMessages.push(jsonData);
-
-        // 2) Rebuild the entire graph from scratch
         rebuildGraph();
-
       } catch (error) {
-        console.error("❌ Error parsing WebSocket data:", error);
+        console.error("Error parsing WebSocket data:", error);
       }
     };
 
     socket.onclose = () => {
-      console.log("⚠ WebSocket disconnected from " + SERVER_URL);
+      console.log("WebSocket disconnected from " + SERVER_URL);
     };
   </script>
 </body>
