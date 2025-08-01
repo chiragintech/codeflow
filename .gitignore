@@ -1,0 +1,6 @@
+app/node_modules/
+mysore/node_modules/
+chirag_a/.vscode
+chirag_a/node_modules/
+
+.env
